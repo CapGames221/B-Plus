@@ -244,7 +244,6 @@ pub fn lowerToMir(allocator: std.mem.Allocator, types: *const bir.types.TypeTabl
                             const dt = birTypeToDataType(types, inst.ty);
                             if (dt != .i64) {
                                 try mfunc.putVReg(result, dt);
-                                std.log.info("putVReg vreg={d} dt={s}", .{ result, @tagName(dt) });
                             }
                         },
                     }
@@ -358,7 +357,12 @@ pub fn lowerToMir(allocator: std.mem.Allocator, types: *const bir.types.TypeTabl
 
                 .ret => {
                     if (inst.operands.len >= 1) {
-                        try mblock.instrs.append(.{ .ret = .{ .value = .{ .vreg = inst.operands[0] } } });
+                        const ret_val = inst.operands[0];
+                        const dt = birTypeToDataType(types, inst.ty);
+                        try mblock.instrs.append(.{ .ret = .{ .value = .{ .operand = .{ .vreg = ret_val }, .dtype = dt } } });
+                        if (dt != .i64) {
+                            try mfunc.putVReg(ret_val, dt);
+                        }
                     } else {
                         try mblock.instrs.append(.{ .ret = .void_ret });
                     }

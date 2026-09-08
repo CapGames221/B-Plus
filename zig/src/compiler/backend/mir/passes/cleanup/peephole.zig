@@ -321,10 +321,10 @@ fn handleRet(map: *std.AutoHashMap(u32, VRegVal), block: *mir.MBlock, ip: *usize
     const m = block.instrs.items[ip.*].ret;
     switch (m) {
         .void_ret => {},
-        .value => |val| {
-            const new_val = resolveConstOp(map, val);
-            if (!operandEq(new_val, val)) {
-                block.instrs.items[ip.*] = .{ .ret = .{ .value = new_val } };
+        .value => |v| {
+            const new_val = resolveConstOp(map, v.operand);
+            if (!operandEq(new_val, v.operand)) {
+                block.instrs.items[ip.*] = .{ .ret = .{ .value = .{ .operand = new_val, .dtype = v.dtype } } };
             }
         },
     }

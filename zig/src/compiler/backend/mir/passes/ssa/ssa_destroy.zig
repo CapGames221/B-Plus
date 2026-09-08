@@ -447,8 +447,8 @@ fn srcVregs(inst: mir.MInst, buf: *[8]u32) usize {
             switch (m) {
                 .void_ret => {},
                 .value => |v| {
-                    if (v == .vreg) {
-                        buf[n] = v.vreg;
+                    if (v.operand == .vreg) {
+                        buf[n] = v.operand.vreg;
                         n += 1;
                     }
                 },

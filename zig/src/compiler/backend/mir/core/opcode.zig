@@ -46,7 +46,10 @@ pub const LeaInst = struct {
 };
 pub const RetInst = union(enum) {
     void_ret,
-    value: MOperand,
+    value: struct {
+        operand: MOperand,
+        dtype: DataType = .i64,
+    },
 };
 
 pub const StateInitInst = struct { initial_state: MOperand };

@@ -76,7 +76,7 @@ pub fn propagateCopies(mfunc: *mir.MFunction) !void {
                 .ret => {
                     const r = &block.instrs.items[i].ret;
                     if (r.* == .value) {
-                        r.* = .{ .value = resolve(map, r.value) };
+                        r.* = .{ .value = .{ .operand = resolve(map, r.value.operand), .dtype = r.value.dtype } };
                     }
                     i += 1;
                 },

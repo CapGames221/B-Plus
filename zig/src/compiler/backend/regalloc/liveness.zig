@@ -378,7 +378,7 @@ pub fn computeLiveIntervals(
                 .ret => |r| switch (r) {
                     .void_ret => {},
                     .value => |v| {
-                        reads[read_count] = vregOf(v); read_count += 1;
+                        reads[read_count] = vregOf(v.operand); read_count += 1;
                     },
                 },
                 .phi => {
@@ -547,14 +547,5 @@ pub fn computeLiveIntervals(
 
         try out_intervals.append(iv);
         idx += 1;
-    }
-
-    for (out_intervals.items) |*iv| {
-        std.log.err("LIV vreg={d} reg={s} start={d} end={d}", .{ iv.vreg, @tagName(iv.reg_class), iv.start, iv.end });
-    }
-
-    std.log.err("LIVENESS: total intervals={d} vreg_info_count={d}", .{ out_intervals.items.len, mfunc.vreg_info.count() });
-    for (out_intervals.items) |iv| {
-        std.log.err("  interval vreg={d} reg_class={s}", .{ iv.vreg, @tagName(iv.reg_class) });
     }
 }

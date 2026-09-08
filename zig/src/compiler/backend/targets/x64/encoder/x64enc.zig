@@ -739,7 +739,7 @@ pub fn emit(code: *std.ArrayList(u8), op: OpCode, operands: []const Operand) !vo
         },
         // SSE scalar single (prefix F3)
         .SSE_MOVSS_LD  => try emitSseOp(code, 0xF3, 0x10, operands[0].reg, operands[1]),
-        .SSE_MOVSS_ST  => try emitSseOp(code, 0xF3, 0x11, operands[1].reg, operands[0]),
+        .SSE_MOVSS_ST  => try emitSseOp(code, 0xF3, 0x11, operands[0].reg, operands[1]),
         .SSE_ADDSS     => try emitSseOp(code, 0xF3, 0x58, operands[0].reg, operands[1]),
         .SSE_SUBSS     => try emitSseOp(code, 0xF3, 0x5C, operands[0].reg, operands[1]),
         .SSE_MULSS     => try emitSseOp(code, 0xF3, 0x59, operands[0].reg, operands[1]),
@@ -794,10 +794,10 @@ pub fn emit(code: *std.ArrayList(u8), op: OpCode, operands: []const Operand) !vo
         // SSE with 66 prefix
         .SSE_MOVD_LD   => try emitSseOp(code, 0x66, 0x6E, operands[0].reg, operands[1]),
         .SSE_MOVD_ST   => try emitSseOp(code, 0x66, 0x7E, operands[1].reg, operands[0]),
-        .SSE_MOVQ_LD   => try emitSseOp(code, 0xF3, 0x7E, operands[0].reg, operands[1]),
+        .SSE_MOVQ_LD   => try emitMovqXmmGpr(code, operands[0].reg, operands[1]),
         .SSE_MOVQ_ST   => try emitSseOp(code, 0x66, 0xD6, operands[1].reg, operands[0]),
         .SSE_MOVSD_LD  => try emitSseOp(code, 0xF2, 0x10, operands[0].reg, operands[1]),
-        .SSE_MOVSD_ST  => try emitSseOp(code, 0xF2, 0x11, operands[1].reg, operands[0]),
+        .SSE_MOVSD_ST  => try emitSseOp(code, 0xF2, 0x11, operands[0].reg, operands[1]),
         .SSE_XORPS     => try emitSseOp(code, 0, 0x57, operands[0].reg, operands[1]),
         // SSE scalar double (prefix F2)
         .SSE_ADDSD     => try emitSseOp(code, 0xF2, 0x58, operands[0].reg, operands[1]),
@@ -865,6 +865,13 @@ fn emitSseOpRexW(code: *std.ArrayList(u8), simd_prefix: u8, opcode: u8, operands
     if (operands.len < 2) return error.MissingOperands;
     if (simd_prefix != 0) try code.append(simd_prefix);
     try emitModrmSibDisp(code, 0x48, opcode, operands[0].reg, operands[1], 0x0F);
+}
+
+fn emitMovqXmmGpr(code: *std.ArrayList(u8), dst_xmm: i16, src: Operand) !void {
+    // movq xmm, r/m64 (GPR -> XMM): 66 REX.W 0F 6E /r
+    // Отличается от F3 0F 7E (movq xmm, xmm): тут источник — регистр общего назначения
+    try code.append(0x66);
+    try emitModrmSibDisp(code, 0x48, 0x6E, dst_xmm, src, 0x0F);
 }
 
 fn prefetchRipRel(code: *std.ArrayList(u8), reg: u8) !void {

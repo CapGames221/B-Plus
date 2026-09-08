@@ -131,9 +131,6 @@ pub fn linearScanSplitting(
             if (findAvailReg(free_regs, pool)) |reg| {
                 removeReg(free_regs, reg);
                 try regs.put(interval.vreg, reg);
-                if (interval.reg_class == .xmm) {
-                    std.log.info("regalloc: vreg={d} assigned xmm={d}", .{ interval.vreg, reg });
-                }
                 try insertSortedByEnd(active, interval);
                 allocated = true;
             }

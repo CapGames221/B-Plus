@@ -55,7 +55,7 @@ fn dumpInst(inst: mir.MInst) void {
         .ret => |r| {
             switch (r) {
                 .void_ret => std.debug.print("ret void", .{}),
-                .value => |v| { std.debug.print("ret ", .{}); dumpOp(v); },
+                .value => |v| { std.debug.print("ret ", .{}); dumpOp(v.operand); },
             }
         },
         .alloca => |a| { std.debug.print("alloca ", .{}); dumpOp(a.dst); },

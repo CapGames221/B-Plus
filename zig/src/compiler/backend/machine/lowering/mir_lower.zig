@@ -84,7 +84,7 @@ fn lowerInst(mir_func: *const mir.MFunction, mir_inst: mir.MInst) !machine.MInst
         .lea => |m| .{ .lea = .{ .dst = lowerOp(mir_func, m.dst), .base = lowerOp(mir_func, m.base), .index = lowerOp(mir_func, m.index), .scale = m.scale, .disp = m.disp } },
         .ret => |m| switch (m) {
             .void_ret => .{ .ret = .void_ret },
-            .value => |v| .{ .ret = .{ .value = lowerOp(mir_func, v) } },
+            .value => |v| .{ .ret = .{ .value = lowerOp(mir_func, v.operand) } },
         },
         .phi => unreachable,
         .fadd => |m| .{ .fadd = .{ .dst = lowerOp(mir_func, m.dst), .a = lowerOp(mir_func, m.a), .b = lowerOp(mir_func, m.b) } },

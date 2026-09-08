@@ -283,7 +283,7 @@ pub fn emitCode(mfuncs: []const mir.MFunction) !EmitCodeResult {
                         if (mi.add.src == .vreg) stderr.print(" src=v{d}", .{mi.add.src.vreg}) catch {};
                     }
                     if (mi == .ret) {
-                        if (mi.ret == .value and mi.ret.value == .vreg) stderr.print(" val=v{d}", .{mi.ret.value.vreg}) catch {};
+                        if (mi.ret == .value and mi.ret.value.operand == .vreg) stderr.print(" val=v{d}", .{mi.ret.value.operand.vreg}) catch {};
                     }
                     if (mi == .store) {
                         if (mi.store.ptr == .vreg) stderr.print(" ptr=v{d}", .{mi.store.ptr.vreg}) catch {};
@@ -322,7 +322,7 @@ pub fn emitCode(mfuncs: []const mir.MFunction) !EmitCodeResult {
                         if (mi.add.src == .vreg) stderr.print(" src=v{d}", .{mi.add.src.vreg}) catch {};
                     }
                     if (mi == .ret) {
-                        if (mi.ret == .value and mi.ret.value == .vreg) stderr.print(" val=v{d}", .{mi.ret.value.vreg}) catch {};
+                        if (mi.ret == .value and mi.ret.value.operand == .vreg) stderr.print(" val=v{d}", .{mi.ret.value.operand.vreg}) catch {};
                     }
                     if (mi == .load) {
                         if (mi.load.dst == .vreg) stderr.print(" dst=v{d}", .{mi.load.dst.vreg}) catch {};

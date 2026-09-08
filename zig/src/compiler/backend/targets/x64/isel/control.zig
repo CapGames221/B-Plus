@@ -51,16 +51,16 @@ pub fn selectCall(ctx: *Ctx, c: mir.CallInst) !void {
 
         if (arg == .imm) {
             if (is_float) {
-                try append2(ctx, .MOV_R64_IMM64, Operand.r(ctx.scratch), .{ .imm64 = @bitCast(arg.imm) });
                 if (float_idx < float_arg_regs.len) {
-                    const xs: i16 = 14;
+                    try append2(ctx, .MOV_R64_IMM64, Operand.r(ctx.scratch), .{ .imm64 = @bitCast(arg.imm) });
+                    const dst_xmm: i16 = float_arg_regs[float_idx];
                     if (dtype == .f64) {
-                        try append2(ctx, .SSE_MOVQ_LD, Operand.xmm(xs), Operand.r(ctx.scratch));
+                        try append2(ctx, .SSE_MOVQ_LD, Operand.xmm(dst_xmm), Operand.r(ctx.scratch));
                     } else {
-                        try append2(ctx, .SSE_MOVD_LD, Operand.xmm(xs), Operand.r(ctx.scratch));
+                        try append2(ctx, .SSE_MOVD_LD, Operand.xmm(dst_xmm), Operand.r(ctx.scratch));
                     }
-                    xmm_src[arg_count] = xs;
-                    xmm_dst[arg_count] = float_arg_regs[float_idx];
+                    xmm_src[arg_count] = dst_xmm;
+                    xmm_dst[arg_count] = dst_xmm;
                     float_idx += 1;
                 }
             } else {
@@ -79,14 +79,18 @@ pub fn selectCall(ctx: *Ctx, c: mir.CallInst) !void {
         if (regalloc.isSpilled(ctx.ra, arg)) {
             try spill.loadSpilledOp(ctx, arg, ctx.scratch);
             if (is_float) {
-                xmm_src[arg_count] = ctx.scratch;
-                const xs: i16 = 14;
-                if (dtype == .f64) {
-                    try append2(ctx, .SSE_MOVQ_LD, Operand.xmm(xs), Operand.r(ctx.scratch));
+                if (float_idx < float_arg_regs.len) {
+                    const dst_xmm: i16 = float_arg_regs[float_idx];
+                    if (dtype == .f64) {
+                        try append2(ctx, .SSE_MOVQ_LD, Operand.xmm(dst_xmm), Operand.r(ctx.scratch));
+                    } else {
+                        try append2(ctx, .SSE_MOVD_LD, Operand.xmm(dst_xmm), Operand.r(ctx.scratch));
+                    }
+                    xmm_src[arg_count] = dst_xmm;
+                    float_idx += 1;
                 } else {
-                    try append2(ctx, .SSE_MOVD_LD, Operand.xmm(xs), Operand.r(ctx.scratch));
+                    xmm_src[arg_count] = ctx.scratch;
                 }
-                xmm_src[arg_count] = xs;
             } else {
                 gpr_src[arg_count] = ctx.scratch;
             }
@@ -202,51 +206,72 @@ pub fn selectRet(ctx: *Ctx, r: mir.RetInst) !void {
         .void_ret => {
             try append2(ctx, .XOR_R64_R64, Operand.r(0), Operand.r(0));
         },
-        .value => |val| {
-            const val_vreg = switch (val) { .vreg => |v| v, else => 0 };
-            const dtype = ctx.mfunc.getVRegType(val_vreg) orelse .i64;
-
-            if (dtype.isFloat()) {
-                const val_spilled = regalloc.isSpilled(ctx.ra, val);
-                if (val_spilled) {
-                    try spill.loadSpilledOp(ctx, val, ctx.scratch);
-                    const xs: i16 = if (ctx.scratch == 15) 14 else 15; 
-                    if (dtype == .f64) {
-                        try append2(ctx, .SSE_MOVQ_LD, Operand.xmm(xs), Operand.r(ctx.scratch));
-                    } else {
-                        try append2(ctx, .SSE_MOVD_LD, Operand.xmm(xs), Operand.r(ctx.scratch));
-                    }
-                    if (xs != 0) {
-                        if (dtype == .f64) {
-                            try append2(ctx, .SSE_MOVSD_LD, Operand.xmm(0), Operand.xmm(xs));
+        .value => |v| {
+            const val = v.operand;
+            const dtype = v.dtype;
+            const val_vreg = switch (val) { .vreg => |vv| vv, else => 0 };
+            if (val_vreg != 0) {
+                const reg_type = ctx.mfunc.getVRegType(val_vreg) orelse dtype;
+                if (reg_type.isFloat()) {
+                    const val_spilled = regalloc.isSpilled(ctx.ra, val);
+                    if (val_spilled) {
+                        try spill.loadSpilledOp(ctx, val, ctx.scratch);
+                        const xs: i16 = if (ctx.scratch == 15) 14 else 15;
+                        if (reg_type == .f64) {
+                            try append2(ctx, .SSE_MOVQ_LD, Operand.xmm(xs), Operand.r(ctx.scratch));
                         } else {
-                            try append2(ctx, .SSE_MOVSS_LD, Operand.xmm(0), Operand.xmm(xs));
+                            try append2(ctx, .SSE_MOVD_LD, Operand.xmm(xs), Operand.r(ctx.scratch));
+                        }
+                        if (xs != 0) {
+                            if (reg_type == .f64) {
+                                try append2(ctx, .SSE_MOVSD_LD, Operand.xmm(0), Operand.xmm(xs));
+                            } else {
+                                try append2(ctx, .SSE_MOVSS_LD, Operand.xmm(0), Operand.xmm(xs));
+                            }
+                        }
+                    } else {
+                        const val_r = resolveReg(ctx.ra, val);
+                        if (val_r != 0) {
+                            if (reg_type == .f64) {
+                                try append2(ctx, .SSE_MOVSD_LD, Operand.xmm(0), Operand.xmm(val_r));
+                            } else {
+                                try append2(ctx, .SSE_MOVSS_LD, Operand.xmm(0), Operand.xmm(val_r));
+                            }
                         }
                     }
                 } else {
-                    const val_r = resolveReg(ctx.ra, val);
-                    if (val_r != 0) {
-                        if (dtype == .f64) {
-                            try append2(ctx, .SSE_MOVSD_LD, Operand.xmm(0), Operand.xmm(val_r));
+                    const val_spilled = regalloc.isSpilled(ctx.ra, val);
+                    if (val_spilled) {
+                        try spill.loadSpilledOp(ctx, val, 0);
+                    } else {
+                        const val_r = resolveOp(ctx.ra, val);
+                        if (val_r.reg >= 0) {
+                            if (val_r.reg != 0) {
+                                try append2(ctx, .MOV_R64_R64, Operand.r(0), val_r);
+                            }
                         } else {
-                            try append2(ctx, .SSE_MOVSS_LD, Operand.xmm(0), Operand.xmm(val_r));
+                            try append2(ctx, .MOV_R64_IMM64, Operand.r(0), val_r);
                         }
+                    }
+                }
+            } else if (dtype.isFloat()) {
+                const imm_bits: u64 = @bitCast(val.imm);
+                try append2(ctx, .MOV_R64_IMM64, Operand.r(ctx.scratch), .{ .imm64 = imm_bits });
+                const xs: i16 = 15;
+                if (dtype == .f64) {
+                    try append2(ctx, .SSE_MOVQ_LD, Operand.xmm(xs), Operand.r(ctx.scratch));
+                } else {
+                    try append2(ctx, .SSE_MOVD_LD, Operand.xmm(xs), Operand.r(ctx.scratch));
+                }
+                if (xs != 0) {
+                    if (dtype == .f64) {
+                        try append2(ctx, .SSE_MOVSD_LD, Operand.xmm(0), Operand.xmm(xs));
+                    } else {
+                        try append2(ctx, .SSE_MOVSS_LD, Operand.xmm(0), Operand.xmm(xs));
                     }
                 }
             } else {
-                const val_spilled = regalloc.isSpilled(ctx.ra, val);
-                if (val_spilled) {
-                    try spill.loadSpilledOp(ctx, val, 0);
-                } else {
-                    const val_r = resolveOp(ctx.ra, val);
-                    if (val_r.reg >= 0) {
-                        if (val_r.reg != 0) {
-                            try append2(ctx, .MOV_R64_R64, Operand.r(0), val_r);
-                        }
-                    } else {
-                        try append2(ctx, .MOV_R64_IMM64, Operand.r(0), val_r);
-                    }
-                }
+                try append2(ctx, .MOV_R64_IMM64, Operand.r(0), .{ .imm64 = @bitCast(val.imm) });
             }
         },
     }

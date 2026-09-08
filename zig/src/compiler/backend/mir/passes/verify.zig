@@ -115,7 +115,7 @@ fn checkUsedVRegs(inst: mir.MInst, defs: *std.AutoHashMap(u32, void)) !void {
         },
         .ret => |r| switch (r) {
             .void_ret => {},
-            .value => |v| try checkDefined(defs, v),
+            .value => |v| try checkDefined(defs, v.operand),
         },
         .phi => |p| {
             for (p.incoming) |inc| {

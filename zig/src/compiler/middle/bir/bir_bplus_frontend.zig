@@ -68,8 +68,21 @@ fn mapType(module: *bir.Module, type_name: []const u8) !TypeId {
 pub fn lowerProgram(allocator: Allocator, program: *const ast.ProgramNode) !bir.Module {
     var module = bir.Module.init(allocator);
     errdefer module.deinit();
+
+    // Инициализируем типы ДО первого прохода
+    try ensureTypes(&module);
+
+    // Первый проход: собираем сигнатуры всех функций (имя -> тип возврата),
+    // чтобы при снижении тела каждой функции мы знали тип возврата остальных.
+    var func_sig_map = std.StringHashMap(TypeId).init(allocator);
+    defer func_sig_map.deinit();
     for (program.metal.func_defs.items) |func| {
-        try lowerFunction(allocator, &module, func);
+        const ret_type = if (func.return_type) |rt| try mapType(&module, rt) else inferReturnType(&module, func);
+        try func_sig_map.put(func.name, ret_type);
+    }
+
+    for (program.metal.func_defs.items) |func| {
+        try lowerFunction(allocator, &module, func, &func_sig_map);
     }
     if (program.plan.states.items.len > 0) {
         try lowerStateMachine(allocator, &module, program.plan.states.items);
@@ -126,6 +139,7 @@ fn lowerFunction(
     allocator: Allocator,
     module: *bir.Module,
     func: ast.EntryDecl,
+    func_sig_map: *const std.StringHashMap(TypeId),
 ) !void {
     try ensureTypes(module);
     // B+ design: return type is optional. Infer from return expressions if not declared.
@@ -155,6 +169,11 @@ fn lowerFunction(
         .func_return_types = std.StringHashMap(TypeId).init(allocator),
         .loop_stack = std.ArrayList(LoopCtx).init(allocator),
     };
+    // Заполняем карту возвратов всех функций, чтобы вызовы знали типы
+    var sig_it = func_sig_map.iterator();
+    while (sig_it.next()) |entry| {
+        try b.func_return_types.put(entry.key_ptr.*, entry.value_ptr.*);
+    }
     defer b.vars.deinit();
     defer b.func_return_types.deinit();
     defer b.loop_stack.deinit();
