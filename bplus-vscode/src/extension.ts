@@ -8,7 +8,6 @@ export function activate(ctx: vscode.ExtensionContext): void {
     const cfg = vscode.workspace.getConfiguration("bplus");
     const bpc = cfg.get<string>("bpcPath", "C:\\B-Plus\\zig\\zig-out\\bin\\bpc.exe");
 
-    ctx.subscriptions.push(vscode.commands.registerCommand("bplus.build", () => runInTerminal(bpc, "build")));
     ctx.subscriptions.push(vscode.commands.registerCommand("bplus.run", () => runInTerminal(bpc, "run")));
     ctx.subscriptions.push(vscode.commands.registerCommand("bplus.test", () => runInTerminal(bpc, "test")));
     ctx.subscriptions.push(vscode.commands.registerCommand("bplus.check", () => runInTerminal(bpc, "check")));

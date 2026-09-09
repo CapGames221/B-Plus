@@ -1,43 +1,13 @@
-# B+ v4.6.4-beta — Compiled `.plan` / `.metal` Language (Frontend → HIR → BIR → MIR → Targets)
+# B+ v4.6.5-alfa — Compiled `.plan` / `.metal` Language (Frontend → HIR → BIR → MIR → Targets)
 
-> [English version ↓](#b-v461-beta--compiled-plan--metal-language-frontend--hir--bir--mir--targets)
+> [!NOTE]
+> Все примеры кода ниже — это **язык B+** (расширение `.b+`), а не Rust.
+> Блоки помечены `rust` только для подсветки синтаксиса на GitHub/в редакторах.
+
+> [English version ↓](#b-v465-alfa--compiled-plan--metal-language-frontend--hir--bir--mir--targets)
 
 **B+** компилирует `.plan` / `.metal` файлы напрямую в машинный код x64 и упаковывает в Windows PE (.exe/.dll).
 Никаких ассемблеров, линкеров, LLVM — весь кодогенератор и оптимизатор написаны с нуля на Zig.
-
-### Что нового в v4.6.4-beta
-
-- Новая архитектура: Frontend → HIR → BIR → MIR → Targets
-- Разделение слоёв: frontend / middle(BIR) / backend(MIR) / targets
-- Новый BIR Core: типизированные Module, Function, Block, Value, Instruction, TypeSystem
-- BIR Optimizer и Analysis: PassManager, CFG, AnalysisManager
-- Новый MIR Core: MFunction, MBlock, MInst, Operand, Opcode, Phi
-- Target Backend: common + x64 (ISel, encoder, frame manager, regalloc)
-- Рефакторинг MIR: CMP/SETCC, 4-operand IDiv, новый Ret, CondCode для FCmp
-- Исправлены critical edge, Phi lowering и проблемы vreg
-- Полный pipeline: BIR → MIR → x64 → executable
-- Парсер теперь syntax-only: убран Dialect из парсера, валидация домена перенесена на этап HIR
-- AST реорганизован: `ProgramNode { common, plan, metal }` — общие конструкции, план и метал отдельно
-- Единый файл `.b+` для обоих доменов (ранее `.plan` / `.metal` отдельно)
-- Слой Frontend: парсер не знает о доменах, принимает весь синтаксис, валидация на HIR
-- Слой Middle (BIR): верификатор разбит на 7 модулей (verify/cfg, verify/ssa, verify/phi, verify/function, verify/types, verify/memory, verify/instructions), CFG строится из терминаторов на лету
-- Слой Backend (MIR): CMP_FLAGS+SETCC, 4-operand IDiv, Ret как union, CondCode для FCmp
-- Слой Targets: common + x64 (ISel, encoder, frame manager, regalloc)
-- BIR Verifier: модульная система верификации из 7 модулей (CFG, SSA, phi, функции, типы, память, инструкции)
-- Структурированная диагностика: коды ошибок, контекст инструкций, список ошибок для интеграции с тулами
-- CFG bounds checking: некорректные адреса переходов ловятся вместо panic
-- SSA verification: тесты на use-before-def и нарушение доминантности
-- Исправлены E2E тесты верификатора: правильный порядок инструкций (терминатор последний), phi incoming через alloc.dupe
-- Исправлен buildCFG: проверка границ перед доступом к блокам по индексу
-- **HIR Unification**: удалён `middle/hir/` (дублирующий tree-based HIR). `StateItem`, `KernelItem`, `HirAttr`, `DispatchSize` перенесены в единый `frontend/hir/item.zig`. Pipeline: `AST → Unified HIR → TIR → BIR → MIR → x64`
-- **THIR (Typed HIR)** — новый слой между HIR и BIR. Статически типизированная IR: `ValueDef` (ty, storage, expr), `ThirExpr` (18 вариантов), `ThirStmt` (9 вариантов), `Terminator` (6 вариантов), `CastKind` (16 вариантов). Pipeline расширен: `AST → Unified HIR → THIR → BIR → MIR → x64`
-- **HIR → THIR lowering**: `LowerContext` с привязкой `ValueId → ExprId`, `classifyCast()` для определения kind кастов, трансляция state/event declarations
-- **THIR → BIR lowering**: модель `ValueBinding` (ssa/stack_slot/address) для корректного SSA. Indirection `ValueId → ExprId → Expr` вместо прямого индекса. `emitPhi`, `param_map`, проекции Place с отслеживанием типов
-- **Memory/ownership**: исправлен контракт владения `MFunction` — backend мутирует переданные mfuncs, защита от shallow-copy deinit и use-after-free при `emitModule`
-- **Тесты**: `test-thir`, `test-thir-to-bir`, `test-backend`, `test-cpu`, `test-fuzz`; новый `src/compiler/test_exports.zig` — единый экспорт compiler modules, исправлены Zig module boundaries
-- **Backend validation**: MIR verification, x64 IR verification, register/operand/instruction validation
-- **`bpc check`**: прогон программы через все верифицируемые слои (Parser → HIR → THIR → BIR → MIR → x64) без кодогенерации; `PASS`/`FAIL` по слоям
-- **`bpc doctor`**: health-check компилятора — рантайм, линкер, полный верифицируемый pipeline на встроенной программе, итог `Compiler stability: OK`
 
 ---
 
@@ -213,10 +183,7 @@ state Hello {
 ```text
 bpc run   <входной.b+>              — скомпилировать и сразу запустить
 bpc dll   <входной.b+>              — скомпилировать в DLL
-bpc build <входной.b+> [-o <каталог>] — сгенерировать C++ UE5 плагин (6 файлов)
 bpc hlsl  <входной.b+>              — сгенерировать HLSL шейдер
-bpc gpu   <входной.b+>              — сгенерировать DXIL
-bpc cpp   <входной.b+>              — сгенерировать C++ код
 bpc mir   <входной.b+>              — сгенерировать COFF .obj
 bpc bpl   <входной.b+>              — понизить B+ до BIR и вывести
 bpc ir    <входной.b+>              — вывести BIR pipeline
@@ -247,28 +214,7 @@ bpc dll test.b+ -o test.dll -exports Init,Update
 bpc dll module.b+
 ```
 
-#### `bpc build <input.b+> [-o <output_dir>]`
-
-Генерирует C++ UE5 плагин из B+ файла с описанием pipeline (6 файлов).
-
-| Шаг | Описание |
-|-----|----------|
-| 1 | Читает файл `.b+` целиком в память |
-| 2 | Разбирает описание pipeline |
-| 3 | Генерирует TSSShaders.h / TSSShaders.cpp |
-| 4 | Генерирует TSSRuntime.h / TSSRuntime.cpp |
-| 5 | Генерирует TSSViewExtension.h / TSSViewExtension.cpp |
-| 6 | Записывает 6 файлов в выходной каталог |
-
-Если `-o` не указан, файлы записываются в каталог исходного файла.
-
-**Примеры:**
-```bash
-bpc build pipeline.b+               → 6 C++ файлов рядом с pipeline.b+
-bpc build pipeline.b+ -o ./Plugin   → 6 C++ файлов в ./Plugin
-```
-
-#### `bpc gpu <input.b+> [-o <output>]` / `bpc hlsl <input.b+> [-o <output.hlsl>]`
+#### `bpc hlsl <input.b+> [-o <output.hlsl>]`
 
 Генерирует HLSL-код из B+ файла с блочным `kernel { ... }` синтаксисом
 или старым (legacy `@bind`/`@cbuffer`). `bpc hlsl` автодетектит синтаксис.
@@ -355,7 +301,6 @@ bpc doctor            — проверка здоровья компилятор
 
 - Компилятор **не использует** внешние ассемблеры, линкеры или LLVM — весь машинный код генерируется самостоятельно.
 - Команда `bpc run` компилирует в `.exe` и сразу запускает.
-- Команда `bpc build` генерирует C++ UE5 плагин (а не .exe).
 
 ---
 
@@ -549,8 +494,9 @@ enum Color {
 
 ```rust
 // однострочный комментарий
--- тоже комментарий
 ```
+
+Только `//`. Форма `--` не поддерживается.
 
 ---
 
@@ -562,28 +508,30 @@ METAL — это второй домен B+ (наряду с PLAN). Исполь
 
 | Тип | Размер (байт) |
 |-----|--------------|
-| `i8` / `u8` / `bool` | 1 |
+| `bool` | 1 |
+| `i8` / `u8` | 1 |
 | `i16` / `u16` | 2 |
 | `i32` / `u32` | 4 |
 | `i64` / `u64` | 8 |
+| `f64` | 8 |
 | `int` | алиас `i64` |
-| `uint` | алиас `u64` |
-| `*T` | 8 (указатель) |
 | `void` | 0 |
+
+> `f32`, `*T`, `string`, `ptr` — объявляются, но полноценная работа с ними ещё в разработке.
 
 ### 4.2 Функции
 
 ```rust
 fn add(a: i64, b: i64) -> i64 {
-    a + b
+    return a + b
 }
 
 fn main() {
-    print_i64(add(3, 4));
+    print(add(3, 4));
 }
 ```
 
-Последнее выражение — неявный `return`. Можно явно:
+Возврат значения — только через явный `return`:
 
 ```rust
 fn max(a: i64, b: i64) -> i64 {
@@ -594,15 +542,11 @@ fn max(a: i64, b: i64) -> i64 {
 }
 ```
 
+Точка входа — `fn main()`. Без неё программа не слинкуется. Функции работают до и после объявления, поддерживается рекурсия.
+
 ### 4.3 Внешние функции
 
-```rust
-extern fn print_i64(x: i64);
-extern fn read_i64() i64;
-extern fn bplus_malloc(size: i64) i64;
-extern fn bplus_free(ptr: i64);
-extern fn bplus_exit(code: i64);
-```
+Не поддерживаются. Единственная точка входа — `fn main()`; системные функции объявляются как обычные.
 
 ### 4.4 Переменные
 
@@ -628,87 +572,80 @@ struct Point {
 var p: Point;
 p.x = 10;
 p.y = 20;
-print_i64(p.x);
+print(p.x);
 ```
 
-Литералы:
-
-```rust
-var p = Point { x: 10, y: 20 };
-var q = Point {
-    x: 30,
-    y: 40,
-};
-```
+> Литералы вида `Point { x: 10, y: 20 }` не поддерживаются — создавайте переменную и заполняйте поля по одному.
 
 ### 4.6 Указатели
 
-```rust
-var x: i64 = 42;
-var p: *i64 = &x;
-var y: i64 = *p;
-*p = 10;
-var addr: *i64 = &p.x;
-```
+Не поддерживаются (адресная арифметика `&x` / разыменование `*p` ещё не реализованы в BIR-понижении).
 
 ### 4.7 If/else
 
 ```rust
 if x > 5 {
-    print_i64(1);
+    print(1);
 } else {
-    print_i64(0);
+    print(0);
 }
 if (x > 5) {
-    print_i64(1);
+    print(1);
 }
 ```
 
 ### 4.8 While
 
 ```rust
+var i: i64 = 0;
 while i < 3 {
-    print_i64(i);
-    i += 1;
+    print(i);
+    i = i + 1;
 }
 ```
 
 `break` / `continue`:
 
 ```rust
+var i: i64 = 0;
 while i < 10 {
-    if i == 5 { break; }
-    if i == 2 { i += 1; continue; }
-    print_i64(i);
-    i += 1;
+    if i == 5 {
+        break;
+    }
+    if i == 2 {
+        i = i + 1;
+        continue;
+    }
+    print(i);
+    i = i + 1;
 }
 ```
 
-### 4.9 For
+### 4.9 For (C-стиль)
 
 ```rust
-for i in 0..10 {
-    print_i64(i);
+for i = 0; i < 10; i = i + 1 {
+    print(i);
 }
 ```
+
+> Форма `for i in 0..10` не поддерживается.
 
 ### 4.10 Составные присваивания
 
-```rust
-x += 1;
-y -= 5;
-z *= 2;
-```
+Не поддерживаются — используйте `x = x + 1`.
 
 ### 4.11 Операторы
 
 | Оператор | Описание |
 |----------|----------|
-| `*` / `/` | умножение, деление |
+| `*` / `/` / `%` | умножение, деление, остаток |
 | `+` / `-` | сложение, вычитание |
 | `==` / `!=` / `>` / `<` / `>=` / `<=` | сравнения |
 | `&&` | логическое И |
 | `\|\|` | логическое ИЛИ |
+| `!` | логическое НЕ |
+| `-x` | унарный минус |
 
 ### 4.12 Комментарии
 
@@ -716,11 +653,13 @@ z *= 2;
 // однострочный комментарий
 ```
 
+Только `//`. Форма `--` не поддерживается.
+
 ### 4.13 Сообщения об ошибках
 
 ```
 error[UnknownVariable]: test_error.b+:4:1
-   4 |     print_i64(y);
+   4 |     print(y);
        | ^
 ```
 
@@ -776,10 +715,17 @@ bpc mir   <input.b+> [-o <output.obj>]
 
 | Тип | Размер (байт) |
 |-----|--------------|
-| `int8`, `i8`, `u8`, `byte`, `bool` | 1 |
-| `int16`, `i16`, `u16`, `short`, `half` | 2 |
-| `int32`, `i32`, `u32`, `int`, `uint`, `float` | 4 |
-| `int64`, `i64`, `u64` (и всё остальное) | 8 |
+| `bool` | 1 |
+| `i8` / `u8` | 1 |
+| `i16` / `u16` | 2 |
+| `i32` / `u32` | 4 |
+| `i64` / `u64` | 8 |
+| `f64` | 8 |
+| `void` | 0 |
+| `int` | алиас `i64` |
+
+> Поддерживаются: `i8 i16 i32 i64 u8 u16 u32 u64 f64 bool string ptr void int`.
+> `f32`, `string`, `ptr` объявляются, но полная поддержка ещё в разработке. Алиасов `int8/int16/int32/int64`, `byte`, `short`, `uint`, `float`, `half` в языке нет.
 
 ---
 
@@ -1184,10 +1130,7 @@ If `hello.exe` appeared and the program ran — the compiler is installed and wo
 ```text
 bpc run   <input.b+>              — compile and run immediately
 bpc dll   <input.b+>              — compile to DLL
-bpc build <input.b+> [-o <dir>]   — generate C++ UE5 plugin (6 files)
 bpc hlsl  <input.b+>              — generate HLSL shader code
-bpc gpu   <input.b+>              — generate DXIL
-bpc cpp   <input.b+>              — generate C++ code
 bpc mir   <input.b+>              — generate COFF .obj
 bpc bpl   <input.b+>              — lower B+ to BIR and dump
 bpc ir    <input.b+>              — dump BIR pipeline
@@ -1197,28 +1140,7 @@ bpc loops <input.b+>              — dump loop hierarchy
 bpc test  <test.bpt>              — run test
 ```
 
-#### `bpc build <input.b+> [-o <output_dir>]`
-
-Generates a C++ UE5 plugin from a B+ file with pipeline description (6 files).
-
-| Step | Description |
-|------|-------------|
-| 1 | Reads the entire `.b+` file into memory |
-| 2 | Parses pipeline description |
-| 3 | Generates TSSShaders.h / TSSShaders.cpp |
-| 4 | Generates TSSRuntime.h / TSSRuntime.cpp |
-| 5 | Generates TSSViewExtension.h / TSSViewExtension.cpp |
-| 6 | Writes 6 files to output directory |
-
-If `-o` is omitted, files are written next to the input file.
-
-**Examples:**
-```bash
-bpc build pipeline.b+               → 6 C++ files next to pipeline.b+
-bpc build pipeline.b+ -o ./Plugin   → 6 C++ files in ./Plugin
-```
-
-#### `bpc gpu <input.b+> [-o <output>]` / `bpc hlsl <input.b+> [-o <output.hlsl>]`
+#### `bpc hlsl <input.b+> [-o <output.hlsl>]`
 
 Generates HLSL shader code from a B+ file using `@bind`, `@cbuffer`, `@groupshared` annotations.
 Designed for authoring GPU compute shaders in B+ and compiling them via DXC or FXC.
@@ -1288,7 +1210,6 @@ bpc run hello.b+      — compiles and runs immediately
 
 - The compiler does **not** use external assemblers, linkers, or LLVM — all machine code is self-generated.
 - `bpc run` compiles to `.exe` and runs it immediately.
-- `bpc build` generates a C++ UE5 plugin (not an .exe).
 
 ---
 
@@ -1482,8 +1403,9 @@ enum Color {
 
 ```rust
 // single-line comment
--- also a comment
 ```
+
+Only `//`. The `--` form is not supported.
 
 ---
 
@@ -1495,28 +1417,30 @@ METAL is the second B+ domain (alongside PLAN). Used for functions, variables, s
 
 | Type | Size (bytes) |
 |------|-------------|
-| `i8` / `u8` / `bool` | 1 |
+| `bool` | 1 |
+| `i8` / `u8` | 1 |
 | `i16` / `u16` | 2 |
 | `i32` / `u32` | 4 |
 | `i64` / `u64` | 8 |
+| `f64` | 8 |
 | `int` | alias for `i64` |
-| `uint` | alias for `u64` |
-| `*T` | 8 (pointer) |
 | `void` | 0 |
+
+> `f32`, `*T`, `string`, `ptr` declare but full support is still under development.
 
 ### 4.2 Functions
 
 ```rust
 fn add(a: i64, b: i64) -> i64 {
-    a + b
+    return a + b
 }
 
 fn main() {
-    print_i64(add(3, 4));
+    print(add(3, 4));
 }
 ```
 
-Last expression is implicit `return`. Explicit `return` also works:
+Returning a value requires an explicit `return`:
 
 ```rust
 fn max(a: i64, b: i64) -> i64 {
@@ -1527,15 +1451,11 @@ fn max(a: i64, b: i64) -> i64 {
 }
 ```
 
+The entry point is `fn main()`. Without it the program does not link. Functions work above and below their call site; recursion is supported.
+
 ### 4.3 Extern Functions
 
-```rust
-extern fn print_i64(x: i64);
-extern fn read_i64() i64;
-extern fn bplus_malloc(size: i64) i64;
-extern fn bplus_free(ptr: i64);
-extern fn bplus_exit(code: i64);
-```
+Not supported. The only entry point is `fn main()`; system functions are declared as ordinary ones.
 
 ### 4.4 Variables
 
@@ -1561,87 +1481,80 @@ Single-line: `struct Point { x: i64, y: i64 }`
 var p: Point;
 p.x = 10;
 p.y = 20;
-print_i64(p.x);
+print(p.x);
 ```
 
-Literals:
-
-```rust
-var p = Point { x: 10, y: 20 };
-var q = Point {
-    x: 30,
-    y: 40,
-};
-```
+> Literals like `Point { x: 10, y: 20 }` are not supported — create a variable and set fields one by one.
 
 ### 4.6 Pointers
 
-```rust
-var x: i64 = 42;
-var p: *i64 = &x;
-var y: i64 = *p;
-*p = 10;
-var addr: *i64 = &p.x;
-```
+Not supported (address arithmetic `&x` / dereference `*p` are not implemented in BIR lowering yet).
 
 ### 4.7 If/else
 
 ```rust
 if x > 5 {
-    print_i64(1);
+    print(1);
 } else {
-    print_i64(0);
+    print(0);
 }
 if (x > 5) {
-    print_i64(1);
+    print(1);
 }
 ```
 
 ### 4.8 While
 
 ```rust
+var i: i64 = 0;
 while i < 3 {
-    print_i64(i);
-    i += 1;
+    print(i);
+    i = i + 1;
 }
 ```
 
 `break` / `continue`:
 
 ```rust
+var i: i64 = 0;
 while i < 10 {
-    if i == 5 { break; }
-    if i == 2 { i += 1; continue; }
-    print_i64(i);
-    i += 1;
+    if i == 5 {
+        break;
+    }
+    if i == 2 {
+        i = i + 1;
+        continue;
+    }
+    print(i);
+    i = i + 1;
 }
 ```
 
-### 4.9 For
+### 4.9 For (C style)
 
 ```rust
-for i in 0..10 {
-    print_i64(i);
+for i = 0; i < 10; i = i + 1 {
+    print(i);
 }
 ```
+
+> The `for i in 0..10` form is not supported.
 
 ### 4.10 Compound Assignment
 
-```rust
-x += 1;
-y -= 5;
-z *= 2;
-```
+Not supported — use `x = x + 1`.
 
 ### 4.11 Operators
 
 | Operator | Description |
 |----------|-------------|
-| `*` / `/` | multiply, divide |
+| `*` / `/` / `%` | multiply, divide, remainder |
 | `+` / `-` | add, subtract |
 | `==` / `!=` / `>` / `<` / `>=` / `<=` | comparisons |
 | `&&` | logical AND |
 | `\|\|` | logical OR |
+| `!` | logical NOT |
+| `-x` | unary minus |
 
 ### 4.12 Comments
 
@@ -1649,11 +1562,13 @@ z *= 2;
 // single-line comment
 ```
 
+Only `//`. The `--` form is not supported.
+
 ### 4.13 Error Messages
 
 ```
 error[UnknownVariable]: test_error.b+:4:1
-   4 |     print_i64(y);
+   4 |     print(y);
        | ^
 ```
 
@@ -1709,10 +1624,17 @@ bpc mir   <input.b+> [-o <output.obj>]
 
 | Type | Size (bytes) |
 |------|-------------|
-| `int8`, `i8`, `u8`, `byte`, `bool` | 1 |
-| `int16`, `i16`, `u16`, `short`, `half` | 2 |
-| `int32`, `i32`, `u32`, `int`, `uint`, `float` | 4 |
-| `int64`, `i64`, `u64` (and anything else) | 8 |
+| `bool` | 1 |
+| `i8` / `u8` | 1 |
+| `i16` / `u16` | 2 |
+| `i32` / `u32` | 4 |
+| `i64` / `u64` | 8 |
+| `f64` | 8 |
+| `void` | 0 |
+| `int` | alias for `i64` |
+
+> Supported: `i8 i16 i32 i64 u8 u16 u32 u64 f64 bool string ptr void int`.
+> `f32`, `string`, `ptr` declare but full support is still under development. The aliases `int8/int16/int32/int64`, `byte`, `short`, `uint`, `float`, `half` do not exist in the language.
 
 ---
 

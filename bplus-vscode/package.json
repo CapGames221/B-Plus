@@ -1,7 +1,7 @@
 {
   "name": "bplus",
   "displayName": "B+",
-  "description": "B+ language support: syntax highlighting, language configuration, compiler integration (build/run/test/check) and LSP diagnostics",
+  "description": "B+ language support: syntax highlighting, language configuration, compiler integration (run/test/check) and LSP diagnostics",
   "version": "0.2.0",
   "publisher": "bplus",
   "license": "MIT",
@@ -27,7 +27,6 @@
   },
   "activationEvents": [
     "onLanguage:bplus",
-    "onCommand:bplus.build",
     "onCommand:bplus.run",
     "onCommand:bplus.test",
     "onCommand:bplus.check"
@@ -50,10 +49,6 @@
       }
     ],
     "commands": [
-      {
-        "command": "bplus.build",
-        "title": "B+: Build"
-      },
       {
         "command": "bplus.run",
         "title": "B+: Run"
